@@ -44,6 +44,44 @@ router.get('/:courseId', function(req, res, next) {
 		.exec((err, course) => err ? res.send(err) : res.json(course));
 });
 
+router.post('/:courseId/reviews', authenticateUser, function(req, res, next) {
+	const timePosted = new Date();
+	const userEmail = auth(req).name;
+	User.findOne({ emailAddress: userEmail })
+		.then(user => {
+			const newReview = new Review({
+				user: user.id,
+				postedOn: timePosted,
+				...req.body
+			});
+			newReview.save(err => {
+			  if (err) return next(err);
+			  else {
+			  	console.log("Document saved.");
+			  	Review.findOne({postedOn: timePosted})
+					.then(review => {
+						Course.findOne({ _id: req.params.courseId })
+						 .then(course => {
+						 	const reviewIds = course.reviews.map(review => review._id);
+						 	reviewIds.push(review.id);
+						 	Course.update(
+								{ _id: req.params.courseId },
+								{ reviews: reviewIds },
+								(err, numAffected) => {
+									if (err) {
+										res.send(err)
+									} else {
+										res.location('/');
+										res.end();
+									}
+								}
+							).catch(err => next(err));
+						 })
+					})
+			}})
+		})
+});
+
 router.post('/', authenticateUser, function(req, res, next) {
 	const newCourse = new Course({...req.body});
 	newCourse.save(err => {
@@ -57,6 +95,7 @@ router.post('/', authenticateUser, function(req, res, next) {
 });
 
 router.put('/:courseId', authenticateUser, function(req, res, next) {
+	console.log(req.params);
 	if (Object.entries(req.body).length === 0 && req.body.constructor === Object) {
 		const error = {
 			message: "Please provide updated course properties in the request body.",
