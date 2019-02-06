@@ -86,26 +86,54 @@ router.post('/:courseId/reviews', authenticateUser, function(req, res, next) {
 });
 
 router.post('/', authenticateUser, function(req, res, next) {
+	let reviewsToAdd = [];
 	if (req.body.hasOwnProperty('reviews')) {
-		const reviewsToAdd = req.body.reviews;
+		reviewsToAdd = req.body.reviews;
+		console.log(reviewsToAdd);
 		delete req.body.reviews;
 	}
 	const newCourse = new Course({...req.body});
-	newCourse.save(
-		/*err => {
-	  if (err) return next(err);
-	  else {
-	  	console.log("Document saved.");
-	  	res.status(201);
-	  	res.location('/');
-		return res.end();
-	  }
-	}*/).then(savedCourse => {
+	newCourse.save().then(savedCourse => {
 		if (reviewsToAdd.length > 0) {
 			const courseId = savedCourse._id;
-			// add code to add reviews in reviewsToAdd here
+			const allReviewIds = [];
+			const reviewsLength = reviewsToAdd.length - 1;
+			for (let reviewCount = 0; reviewCount <= reviewsLength; reviewCount++) {
+				(function(reviewToAddAsync) {
+					if (!reviewToAddAsync.hasOwnProperty('postedOn')) {
+						reviewToAddAsync.postedOn = new Date();
+					}
+					const userEmail = auth(req).name;
+					User.findOne({ emailAddress: userEmail })
+						.then(user => {
+							const newReview = new Review({
+								user: user.id,
+								...reviewToAddAsync
+							});
+							newReview.save().then(savedReview => {
+							  	Review.findOne({...reviewToAddAsync})
+									.then(review => {
+										Course.findOne({ _id: courseId })
+										 .then(course => {
+										 	allReviewIds.push(review.id);
+										 	Course.update(
+												{ _id: courseId },
+												{ reviews: allReviewIds },
+												(err, numAffected) => { if (err !== null) { console.log(err)}}
+											).catch(err => next(err));
+										 }).catch(err => next(err));
+									}).catch(err => next(err));
+									if (reviewCount === reviewsLength) {
+										return res.location('/').status(201).end();
+									}
+							}).catch(err => next(err));
+						})
+				})(reviewsToAdd[reviewCount]);
+			}
+		} else {
+			return res.location('/').status(201).end();
 		}
-	})
+	}).catch(err => next(err));
 });
 
 router.put('/:courseId', authenticateUser, function(req, res, next) {
